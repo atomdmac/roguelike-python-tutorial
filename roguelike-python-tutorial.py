@@ -32,7 +32,7 @@ def handle_keys():
 
 
 # init
-font = 'libtcod-1.5.1/data/fonts/arial12x12.png'
+font = 'arial10x10.png'
 libtcod.console_set_custom_font (font, libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
 libtcod.sys_set_fps(LIMIT_FPS)
