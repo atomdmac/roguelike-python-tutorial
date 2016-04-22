@@ -1,7 +1,7 @@
 import libtcodpy as libtcod;
 
 SCREEN_WIDTH = 80;
-SCREEN_HEIGHT = 30
+SCREEN_HEIGHT = 45
 LIMIT_FPS = 20
 
 playerx = SCREEN_WIDTH / 2
