@@ -13,43 +13,49 @@ def handle_keys():
     # Movement keys
     key = libtcod.console_check_for_keypress (True)
 
-    if key.c == ord('k'):
-        player.move(0, -1)
-        need_fov_refresh = True
-
-    elif key.c == ord('j'):
-        player.move(0, 1)
-        need_fov_refresh = True
-
-    elif key.c == ord('h'):
-        player.move(-1, 0)
-        need_fov_refresh = True
-
-    elif key.c == ord('l'):
-        player.move(1, 0)
-        need_fov_refresh = True
-
-    elif key.c == ord('y'):
-        player.move(-1, -1)
-        need_fov_refresh = True
-
-    elif key.c == ord('u'):
-        player.move(1, -1)
-        need_fov_refresh = True
-
-    elif key.c == ord('n'):
-        player.move(1, 1)
-        need_fov_refresh = True
-
-    elif key.c == ord('b'):
-        player.move(-1, 1)
-        need_fov_refresh = True
 
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
 
     elif key.vk == libtcod.KEY_ESCAPE:
-        return True
+        return 'exit'
+
+    # Only allow movement if we're in the 'playing' state
+    if game_state == 'playing':
+        if key.c == ord('k'):
+            player_move_or_attack(0, -1)
+            need_fov_refresh = True
+
+        elif key.c == ord('j'):
+            player_move_or_attack(0, 1)
+            need_fov_refresh = True
+
+        elif key.c == ord('h'):
+            player_move_or_attack(-1, 0)
+            need_fov_refresh = True
+
+        elif key.c == ord('l'):
+            player_move_or_attack(1, 0)
+            need_fov_refresh = True
+
+        elif key.c == ord('y'):
+            player_move_or_attack(-1, -1)
+            need_fov_refresh = True
+
+        elif key.c == ord('u'):
+            player_move_or_attack(1, -1)
+            need_fov_refresh = True
+
+        elif key.c == ord('n'):
+            player_move_or_attack(1, 1)
+            need_fov_refresh = True
+
+        elif key.c == ord('b'):
+            player_move_or_attack(-1, 1)
+            need_fov_refresh = True
+
+        else:
+            return 'didnt-take-turn'
 
 ################################################################################
 # Object Class!
@@ -57,14 +63,16 @@ def handle_keys():
 class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
-    def __init__(self, x, y, char, color):
+    def __init__(self, x, y, char, name, color, blocks=False):
         self.x = x
         self.y = y
         self.char = char
+        self.name = name
         self.color = color
+        self.blocks = True
  
     def move(self, dx, dy):
-        if not map[self.x + dx][self.y + dy].blocked:
+        if not is_blocked(self.x+dx, self.y+dy):
             #move by the given amount
             self.x += dx
             self.y += dy
@@ -83,9 +91,32 @@ class Object:
 ################################################################################
 # Initialize actors and items
 ################################################################################
-player = Object(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, '@', libtcod.white)
-npc = Object(SCREEN_WIDTH/2 - 5, SCREEN_HEIGHT/2, '@', libtcod.yellow)
-objects = [npc, player]
+player = Object(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, '@', 'Player', libtcod.white, blocks=True)
+objects = [player]
+
+################################################################################
+# Additional player set-up
+################################################################################
+def player_move_or_attack(dx, dy):
+    global fov_recompute
+ 
+    #the coordinates the player is moving to/attacking
+    x = player.x + dx
+    y = player.y + dy
+ 
+    #try to find an attackable object there
+    target = None
+    for object in objects:
+        if object.x == x and object.y == y:
+            target = object
+            break
+ 
+    #attack if target found, move otherwise
+    if target is not None:
+        print 'The ' + target.name + ' laughs at your puny efforts to attack him!'
+    else:
+        player.move(dx, dy)
+        fov_recompute = True
 
 ################################################################################
 # Map
@@ -97,11 +128,12 @@ ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 30
 
+MAX_ROOM_MONSTERS = 3
+
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
 color_dark_ground = libtcod.Color(50, 50, 150)
 color_light_ground = libtcod.Color(200, 180, 50)
-
 
 class Tile:
     #a tile of the map and its properties
@@ -151,6 +183,27 @@ def create_v_tunnel(y1, y2, x):
     for y in range(min(y1, y2), max(y1, y2) + 1):
         map[x][y].blocked = False
         map[x][y].block_sight = False
+
+def place_objects(room):
+    #choose random number of monsters
+    num_monsters = libtcod.random_get_int(0, 0, MAX_ROOM_MONSTERS)
+ 
+    for i in range(num_monsters):
+        #choose random spot for this monster
+        x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
+        y = libtcod.random_get_int(0, room.y1+1, room.y2-1)
+
+        if is_blocked(x, y):
+            continue
+ 
+        if libtcod.random_get_int(0, 0, 100) < 80:  #80% chance of getting an orc
+            #create an orc
+            monster = Object(x, y, 'o', 'Orc', libtcod.desaturated_green, blocks=True)
+        else:
+            #create a troll
+            monster = Object(x, y, 'T', 'Troll', libtcod.darker_green, blocks=True)
+ 
+        objects.append(monster)
 
 def make_map():
     global map
@@ -211,6 +264,9 @@ def make_map():
                     #first move vertically, then horizontally
                     create_v_tunnel(prev_y, new_y, prev_x)
                     create_h_tunnel(prev_x, new_x, new_y)
+
+            # Add some objects to the room
+            place_objects(new_room)
  
             #finally, append the new room to the list
             rooms.append(new_room)
@@ -218,8 +274,20 @@ def make_map():
 
             # optional: print "room number" to see how the map drawing worked
             # we may have more than ten rooms, so print 'A' for the first room, 'B' for the next...
-            room_no = Object(new_x, new_y, chr(65+num_rooms), libtcod.white)
-            objects.insert(0, room_no) #draw early, so monsters are drawn on top
+            # room_no = Object(new_x, new_y, chr(65+num_rooms), libtcod.white)
+            # objects.insert(0, room_no) #draw early, so monsters are drawn on top
+
+def is_blocked(x, y):
+    #first test the map tile
+    if map[x][y].blocked:
+        return True
+ 
+    #now check for any blocking objects
+    for object in objects:
+        if object.blocks and object.x == x and object.y == y:
+            return True
+ 
+    return False
 
 def render_all():
     global fov_map, color_dark_wall, color_light_wall
@@ -286,6 +354,10 @@ libtcod.console_set_custom_font (font, libtcod.FONT_TYPE_GREYSCALE | libtcod.FON
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
 libtcod.sys_set_fps(LIMIT_FPS)
 
+# Track game state
+game_state = 'playing'
+player_action = 'None'
+
 # Initialize minor consoles
 con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
 make_map()
@@ -306,8 +378,15 @@ while not libtcod.console_is_window_closed():
         object.clear()
 
     # Handle user input
-    exit = handle_keys()
-    if exit:
+    player_action = handle_keys()
+
+    #let monsters take their turn
+    if game_state == 'playing' and player_action != 'didnt-take-turn':
+        for object in objects:
+            if object != player:
+                print 'The ' + object.name + ' growls!'
+
+    if player_action == 'exit':
         break
 
 
