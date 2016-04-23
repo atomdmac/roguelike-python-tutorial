@@ -74,10 +74,6 @@ player = Object(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, '@', libtcod.white)
 npc = Object(SCREEN_WIDTH/2 - 5, SCREEN_HEIGHT/2, '@', libtcod.yellow)
 objects = [npc, player]
 
-# !! DEBUG !! Place player in debug room
-player.x = 25
-player.y = 22
-
 ################################################################################
 # Rectangles and Rooms
 ################################################################################
