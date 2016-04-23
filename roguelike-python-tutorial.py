@@ -11,19 +11,32 @@ def handle_keys():
     global playerx, playery
 
     #movement keys
-    if libtcod.console_is_key_pressed(libtcod.KEY_UP):
+    key = libtcod.console_check_for_keypress (True)
+
+    if key.c == ord('k'):
         player.move(0, -1)
 
-    elif libtcod.console_is_key_pressed(libtcod.KEY_DOWN):
+    elif key.c == ord('j'):
         player.move(0, 1)
 
-    elif libtcod.console_is_key_pressed(libtcod.KEY_LEFT):
+    elif key.c == ord('h'):
         player.move(-1, 0)
 
-    elif libtcod.console_is_key_pressed(libtcod.KEY_RIGHT):
+    elif key.c == ord('l'):
         player.move(1, 0)
 
-    key = libtcod.console_check_for_keypress ()
+    elif key.c == ord('y'):
+        player.move(-1, -1)
+
+    elif key.c == ord('u'):
+        player.move(1, -1)
+
+    elif key.c == ord('n'):
+        player.move(1, 1)
+
+    elif key.c == ord('b'):
+        player.move(-1, 1)
+
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
 
