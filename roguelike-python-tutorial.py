@@ -1,9 +1,19 @@
 import math
+import textwrap
 import libtcodpy as libtcod;
 
 SCREEN_WIDTH = 80;
 SCREEN_HEIGHT = 45
 LIMIT_FPS = 20
+
+#sizes and coordinates relevant for the GUI
+BAR_WIDTH = 20
+PANEL_HEIGHT = 7
+PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
+
+MSG_X = BAR_WIDTH + 2
+MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH - 2
+MSG_HEIGHT = PANEL_HEIGHT - 1
 
 ################################################################################
 # User Input
@@ -143,10 +153,10 @@ class Fighter:
  
         if damage > 0:
             #make the target take some damage
-            print self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points. (' + str(self.hp) + '/' + str(self.max_hp) + ')'
+            message(self.owner.name.capitalize() + ' attacks ' + target.name + ' for ' + str(damage) + ' hit points.)')
             target.fighter.take_damage(damage)
         else:
-            print self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!'
+            message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!')
 
 class BasicMonster:
     #AI for a basic monster.
@@ -166,7 +176,7 @@ class BasicMonster:
 def player_death(player):
     #the game ended!
     global game_state
-    print 'You died!'
+    message('You died!')
     game_state = 'dead'
  
     #for added effect, transform the player into a corpse!
@@ -179,7 +189,7 @@ def player_death(player):
 def monster_death(monster):
     #transform it into a nasty corpse! it doesn't block, can't be
     #attacked and doesn't move
-    print monster.name.capitalize() + ' is dead!'
+    message(monster.name.capitalize() + ' is dead!')
     monster.char = '%'
     monster.color = libtcod.dark_red
     monster.blocks = False
@@ -410,6 +420,14 @@ def render_all():
     global color_dark_ground, color_light_ground
     global need_fov_refresh
 
+    top_x = player.x - MAP_WIDTH / 2
+    top_y = player.y - MAP_HEIGHT / 2
+
+    if top_x < 0:
+        top_x = 0
+    if top_y < 0:
+        top_y = 0
+
     if need_fov_refresh:
 
         #recompute FOV if needed (the player moved or something)
@@ -417,8 +435,8 @@ def render_all():
         libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
  
         #go through all tiles, and set their background color according to the FOV
-        for y in range(MAP_HEIGHT):
-            for x in range(MAP_WIDTH):
+        for y in range(top_y, MAP_HEIGHT):
+            for x in range(top_x, MAP_WIDTH):
                 visible = libtcod.map_is_in_fov(fov_map, x, y)
                 wall = map[x][y].block_sight
                 if not visible:
@@ -444,12 +462,57 @@ def render_all():
     player.draw()
      
     #blit the contents of "con" to the root console
-    libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
+    libtcod.console_blit(con, top_x, top_y, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 
+    #prepare to render the GUI panel
+    libtcod.console_set_default_background(panel, libtcod.black)
+    libtcod.console_clear(panel)
+ 
     #show the player's stats
-    libtcod.console_set_default_foreground(con, libtcod.white)
-    libtcod.console_print_ex(0, 1, SCREEN_HEIGHT - 2, libtcod.BKGND_NONE, libtcod.LEFT,
-        'HP: ' + str(player.fighter.hp) + '/' + str(player.fighter.max_hp))
+    render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
+        libtcod.light_red, libtcod.darker_red)
+
+    #print the game messages, one line at a time
+    y = 1
+    for (line, color) in game_msgs:
+        libtcod.console_set_default_foreground(panel, color)
+        libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
+        y += 1
+ 
+    #blit the contents of "panel" to the root console
+    libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
+
+def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
+    #render a bar (HP, experience, etc). first calculate the width of the bar
+    bar_width = int(float(value) / maximum * total_width)
+ 
+    #render the background first
+    libtcod.console_set_default_background(panel, back_color)
+    libtcod.console_rect(panel, x, y, total_width, 1, False, libtcod.BKGND_SCREEN)
+ 
+    #now render the bar on top
+    libtcod.console_set_default_background(panel, bar_color)
+    if bar_width > 0:
+        libtcod.console_rect(panel, x, y, bar_width, 1, False, libtcod.BKGND_SCREEN)
+
+    #finally, some centered text with the values
+    libtcod.console_set_default_foreground(panel, libtcod.white)
+    libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
+        name + ': ' + str(value) + '/' + str(maximum))
+
+game_msgs = []
+
+def message(new_msg, color = libtcod.white):
+    #split the message if necessary, among multiple lines
+    new_msg_lines = textwrap.wrap(new_msg, MSG_WIDTH)
+ 
+    for line in new_msg_lines:
+        #if the buffer is full, remove the first line to make room for the new one
+        if len(game_msgs) == MSG_HEIGHT:
+            del game_msgs[0]
+ 
+        #add the new line as a tuple, with the text and the color
+        game_msgs.append( (line, color) )
 
 ################################################################################
 # Field of View
@@ -483,8 +546,12 @@ player_action = 'None'
 
 # Initialize minor consoles
 con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
+panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 make_map()
 make_fov_map()
+
+#a warm welcoming message!
+message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
 
 ################################################################################
 # Event Loop
