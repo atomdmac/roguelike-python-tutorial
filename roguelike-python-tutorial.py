@@ -4,54 +4,52 @@ SCREEN_WIDTH = 80;
 SCREEN_HEIGHT = 45
 LIMIT_FPS = 20
 
-playerx = SCREEN_WIDTH / 2
-playery = SCREEN_HEIGHT / 2
-
+################################################################################
+# User Input
+################################################################################
 def handle_keys():
-    global playerx, playery
+    global need_fov_refresh
 
-    #movement keys
+    # Movement keys
     key = libtcod.console_check_for_keypress (True)
 
     if key.c == ord('k'):
         player.move(0, -1)
+        need_fov_refresh = True
 
     elif key.c == ord('j'):
         player.move(0, 1)
+        need_fov_refresh = True
 
     elif key.c == ord('h'):
         player.move(-1, 0)
+        need_fov_refresh = True
 
     elif key.c == ord('l'):
         player.move(1, 0)
+        need_fov_refresh = True
 
     elif key.c == ord('y'):
         player.move(-1, -1)
+        need_fov_refresh = True
 
     elif key.c == ord('u'):
         player.move(1, -1)
+        need_fov_refresh = True
 
     elif key.c == ord('n'):
         player.move(1, 1)
+        need_fov_refresh = True
 
     elif key.c == ord('b'):
         player.move(-1, 1)
+        need_fov_refresh = True
 
     if key.vk == libtcod.KEY_ENTER and key.lalt:
         libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
 
     elif key.vk == libtcod.KEY_ESCAPE:
         return True
-
-
-# init
-font = 'arial10x10.png'
-libtcod.console_set_custom_font (font, libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
-libtcod.sys_set_fps(LIMIT_FPS)
-
-# Initialize minor consoles
-con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
 
 ################################################################################
 # Object Class!
@@ -72,9 +70,11 @@ class Object:
             self.y += dy
  
     def draw(self):
-        #set the color and then draw the character that represents this object at its position
-        libtcod.console_set_default_foreground(con, self.color)
-        libtcod.console_put_char(con, self.x, self.y, self.char, libtcod.BKGND_NONE)
+        # Don't draw if outside of the player's field-of-view
+        if libtcod.map_is_in_fov(fov_map, self.x, self.y):
+            # set the color and then draw the character that represents this object at its position
+            libtcod.console_set_default_foreground(con, self.color)
+            libtcod.console_put_char(con, self.x, self.y, self.char, libtcod.BKGND_NONE)
  
     def clear(self):
         #erase the character that represents this object
@@ -88,11 +88,30 @@ npc = Object(SCREEN_WIDTH/2 - 5, SCREEN_HEIGHT/2, '@', libtcod.yellow)
 objects = [npc, player]
 
 ################################################################################
-# Rectangles and Rooms
+# Map
 ################################################################################
+MAP_WIDTH = 80
+MAP_HEIGHT = 45
+
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 30
+
+color_dark_wall = libtcod.Color(0, 0, 100)
+color_light_wall = libtcod.Color(130, 110, 50)
+color_dark_ground = libtcod.Color(50, 50, 150)
+color_light_ground = libtcod.Color(200, 180, 50)
+
+
+class Tile:
+    #a tile of the map and its properties
+    def __init__(self, blocked, block_sight = None):
+        self.blocked = blocked
+ 
+        #by default, if a tile is blocked, it also blocks sight
+        if block_sight is None: block_sight = blocked
+        self.block_sight = block_sight
+        self.explored = False
 
 class Rect:
     #a rectangle on the map. used to characterize a room.
@@ -132,24 +151,6 @@ def create_v_tunnel(y1, y2, x):
     for y in range(min(y1, y2), max(y1, y2) + 1):
         map[x][y].blocked = False
         map[x][y].block_sight = False
-
-################################################################################
-# Map
-################################################################################
-MAP_WIDTH = 80
-MAP_HEIGHT = 45
-
-color_dark_wall = libtcod.Color(0, 0, 100)
-color_dark_ground = libtcod.Color(50, 50, 150)
-
-class Tile:
-    #a tile of the map and its properties
-    def __init__(self, blocked, block_sight = None):
-        self.blocked = blocked
- 
-        #by default, if a tile is blocked, it also blocks sight
-        if block_sight is None: block_sight = blocked
-        self.block_sight = block_sight
 
 def make_map():
     global map
@@ -215,26 +216,80 @@ def make_map():
             rooms.append(new_room)
             num_rooms += 1
 
+            # optional: print "room number" to see how the map drawing worked
+            # we may have more than ten rooms, so print 'A' for the first room, 'B' for the next...
+            room_no = Object(new_x, new_y, chr(65+num_rooms), libtcod.white)
+            objects.insert(0, room_no) #draw early, so monsters are drawn on top
+
 def render_all():
+    global fov_map, color_dark_wall, color_light_wall
+    global color_dark_ground, color_light_ground
+    global need_fov_refresh
+
+    if need_fov_refresh:
+
+        #recompute FOV if needed (the player moved or something)
+        need_fov_refresh = False
+        libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
+ 
+        #go through all tiles, and set their background color according to the FOV
+        for y in range(MAP_HEIGHT):
+            for x in range(MAP_WIDTH):
+                visible = libtcod.map_is_in_fov(fov_map, x, y)
+                wall = map[x][y].block_sight
+                if not visible:
+                    #if it's not visible right now, the player can only see it if it's explored
+                    if map[x][y].explored:
+                        if wall:
+                            libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET)
+                        else:
+                            libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET)
+                else:
+                    #it's visible
+                    if wall:
+                        libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
+                    else:
+                        libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
+                    #since it's visible, explore it
+                    map[x][y].explored = True
+ 
     #draw all objects in the list
     for object in objects:
         object.draw()
-
-    for y in range(MAP_HEIGHT):
-        for x in range(MAP_WIDTH):
-            wall = map[x][y].block_sight
-            if wall:
-                libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
-            else:
-                libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET )
-
+ 
+    #blit the contents of "con" to the root console
     libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 
+################################################################################
+# Field of View
+################################################################################
+FOV_ALGO = 0  #default FOV algorithm
+FOV_LIGHT_WALLS = True
+TORCH_RADIUS = 10
+
+# Do we need to refresh FOV this turn?
+need_fov_refresh = True
+
+# Initialize FOV map
+def make_fov_map():
+    global fov_map
+    fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
 
 ################################################################################
-# Initialize the map
+# Initialization
 ################################################################################
+font = 'arial10x10.png'
+libtcod.console_set_custom_font (font, libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
+libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
+libtcod.sys_set_fps(LIMIT_FPS)
+
+# Initialize minor consoles
+con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
 make_map()
+make_fov_map()
 
 ################################################################################
 # Event Loop
