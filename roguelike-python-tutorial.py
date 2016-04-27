@@ -4,11 +4,13 @@ import libtcodpy as libtcod;
 
 SCREEN_WIDTH = 80;
 SCREEN_HEIGHT = 45
+VIEWPORT_WIDTH = 80
+VIEWPORT_HEIGHT = 35
 LIMIT_FPS = 20
 
 #sizes and coordinates relevant for the GUI
 BAR_WIDTH = 20
-PANEL_HEIGHT = 7
+PANEL_HEIGHT = 10
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
 
 MSG_X = BAR_WIDTH + 2
@@ -72,6 +74,21 @@ def handle_keys():
         else:
             return 'didnt-take-turn'
 
+class Camera:
+    def __init__(self, viewport_w, viewport_h, map_w, map_h):
+        self.viewport_w = viewport_w
+        self.viewport_h = viewport_h
+        self.map_w = map_w
+        self.map_h = map_h
+
+    def center(self, target):
+        self.x = target.x - (self.viewport_w / 2)
+        self.y = target.y - (self.viewport_h / 2)
+        if self.x < 0: self.x = 0
+        if self.y < 0: self.y = 0
+        if self.x >= self.map_w - self.viewport_w: self.x = self.map_w - self.viewport_w - 1
+        if self.y >= self.map_h - self.viewport_h: self.y = self.map_h - self.viewport_h - 1
+
 ################################################################################
 # Objects and Monsters
 ################################################################################
@@ -123,11 +140,11 @@ class Object:
         if libtcod.map_is_in_fov(fov_map, self.x, self.y):
             # set the color and then draw the character that represents this object at its position
             libtcod.console_set_default_foreground(con, self.color)
-            libtcod.console_put_char(con, self.x, self.y, self.char, libtcod.BKGND_NONE)
+            libtcod.console_put_char(con, self.x - cam.x, self.y - cam.y, self.char, libtcod.BKGND_NONE)
  
     def clear(self):
         #erase the character that represents this object
-        libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
+        libtcod.console_put_char(con, self.x - cam.x, self.y - cam.y, ' ', libtcod.BKGND_NONE)
 
 class Fighter:
     #combat-related properties and methods (monster, player, NPC).
@@ -241,12 +258,12 @@ def player_move_or_attack(dx, dy):
 ################################################################################
 # Map
 ################################################################################
-MAP_WIDTH = 80
-MAP_HEIGHT = 45
+MAP_WIDTH = 500
+MAP_HEIGHT = 500
 
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
-MAX_ROOMS = 30
+MAX_ROOMS = 100
 
 MAX_ROOM_MONSTERS = 3
 
@@ -331,6 +348,22 @@ def place_objects(room):
  
         objects.append(monster)
 
+def make_debug_map():
+    global map
+ 
+    # Fill map with "unblocked" tiles
+    map = [[ Tile(False)
+        for y in range(MAP_HEIGHT) ]
+            for x in range(MAP_WIDTH) ]
+
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            if y == 0 or y == MAP_HEIGHT-1 or x == 0 or x == MAP_WIDTH-1:
+                map[x][y].blocked = True
+
+    player.x = 20
+    player.y = 20
+
 def make_map():
     global map
  
@@ -413,20 +446,13 @@ def is_blocked(x, y):
         if object.blocks and object.x == x and object.y == y:
             return True
  
-    return False
+    return False      
 
 def render_all():
     global fov_map, color_dark_wall, color_light_wall
     global color_dark_ground, color_light_ground
     global need_fov_refresh
 
-    top_x = player.x - MAP_WIDTH / 2
-    top_y = player.y - MAP_HEIGHT / 2
-
-    if top_x < 0:
-        top_x = 0
-    if top_y < 0:
-        top_y = 0
 
     if need_fov_refresh:
 
@@ -435,17 +461,25 @@ def render_all():
         libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
  
         #go through all tiles, and set their background color according to the FOV
-        for y in range(top_y, MAP_HEIGHT):
-            for x in range(top_x, MAP_WIDTH):
-                visible = libtcod.map_is_in_fov(fov_map, x, y)
-                wall = map[x][y].block_sight
+        for y in range(VIEWPORT_HEIGHT):
+            for x in range(VIEWPORT_WIDTH):
+
+                map_x = cam.x + x
+                map_y = cam.y + y
+
+                visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
+                wall = map[map_x][map_y].block_sight
+                
                 if not visible:
                     #if it's not visible right now, the player can only see it if it's explored
-                    if map[x][y].explored:
+                    if map[map_x][map_y].explored:
                         if wall:
                             libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET)
                         else:
                             libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET)
+                    else:
+                        libtcod.console_set_char_background(con, x, y, libtcod.black, libtcod.BKGND_SET)
+
                 else:
                     #it's visible
                     if wall:
@@ -453,7 +487,7 @@ def render_all():
                     else:
                         libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
                     #since it's visible, explore it
-                    map[x][y].explored = True
+                    map[map_x][map_y].explored = True
  
     #draw all objects in the list
     for object in objects:
@@ -462,7 +496,7 @@ def render_all():
     player.draw()
      
     #blit the contents of "con" to the root console
-    libtcod.console_blit(con, top_x, top_y, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
+    libtcod.console_blit(con, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, 0, 0, 0)
 
     #prepare to render the GUI panel
     libtcod.console_set_default_background(panel, libtcod.black)
@@ -480,7 +514,7 @@ def render_all():
         y += 1
  
     #blit the contents of "panel" to the root console
-    libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
+    libtcod.console_blit(panel, 0, 0, VIEWPORT_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
 
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     #render a bar (HP, experience, etc). first calculate the width of the bar
@@ -545,9 +579,13 @@ game_state = 'playing'
 player_action = 'None'
 
 # Initialize minor consoles
-con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
+con = libtcod.console_new(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
+
+cam = Camera(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAP_WIDTH, MAP_HEIGHT)
+
 make_map()
+#make_debug_map()
 make_fov_map()
 
 #a warm welcoming message!
@@ -560,6 +598,7 @@ while not libtcod.console_is_window_closed():
 
     # Render
     libtcod.console_set_default_foreground(0, libtcod.white)
+    cam.center(player)
     render_all()
     libtcod.console_flush()
 
