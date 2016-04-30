@@ -6,6 +6,7 @@ SCREEN_WIDTH = 80;
 SCREEN_HEIGHT = 45
 VIEWPORT_WIDTH = 80
 VIEWPORT_HEIGHT = 35
+MENU_WIDTH = SCREEN_WIDTH - (SCREEN_WIDTH / 4)
 LIMIT_FPS = 20
 
 #sizes and coordinates relevant for the GUI
@@ -67,6 +68,19 @@ def handle_keys():
             player_move_or_attack(-1, 1)
             need_fov_refresh = True
 
+        # Pick up an item on the ground
+        elif key.c == ord('g'):
+            for object in objects:
+                if object.x == player.x and object.y == player.y and object.item:
+                    object.item.pick_up(player)
+
+        # View inventory
+        elif key.c == ord('i'):
+            item = show_inventory('Here\'s what you\'ve got...')
+
+            if item != None: 
+                item.use()
+
         # Wait a turn
         elif key.c == ord('.'):
             pass
@@ -90,18 +104,19 @@ class Camera:
         if self.y >= self.map_h - self.viewport_h: self.y = self.map_h - self.viewport_h - 1
 
 ################################################################################
-# Objects and Monsters
+# Objects, Monsters, and Items
 ################################################################################
 class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
-    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None):
+    def __init__(self, x, y, char, name, color, 
+        blocks=False, fighter=None, ai=None, item=None, door=None):
         self.x = x
         self.y = y
         self.char = char
         self.name = name
         self.color = color
-        self.blocks = True
+        self.blocks = blocks
 
         self.fighter = fighter
         if self.fighter:  #let the fighter component know who owns it
@@ -110,6 +125,14 @@ class Object:
         self.ai = ai
         if self.ai:  #let the AI component know who owns it
             self.ai.owner = self
+        
+        self.item = item
+        if self.item:  #let the Item component know who owns it
+            self.item.owner = self
+
+        self.door = door
+        if self.door:  #let the Item component know who owns it
+            self.door.owner = self
 
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
@@ -164,6 +187,12 @@ class Fighter:
             if self.death_function is not None:
                 self.death_function(self.owner)
 
+    def heal(self, amount):
+        # Heal by the given amount without going over the maximim
+        self.hp += amount
+        if self.hp > self.max_hp:
+            self.hp = self.max_hp
+
     def attack(self, target):
         #a simple formula for attack damage
         damage = self.power - target.fighter.defense
@@ -189,6 +218,35 @@ class BasicMonster:
             #close enough, attack! (if the player is still alive.)
             elif player.fighter.hp > 0:
                 monster.fighter.attack(player)
+
+class Item:
+    def __init__(self, use_function=None, carrier=None):
+        self.use_function = use_function
+        self.carrier = carrier
+
+    #an item that can be picked up and used.
+    def pick_up(self, carrier):
+        #add to the player's inventory and remove from the map
+        if len(inventory) >= 26:
+            message('Your inventory is full, cannot pick up ' + self.owner.name + '.', libtcod.red)
+        else:
+            # Now this item is being carried by someone... or SOMETHING!
+            self.carrier = carrier
+
+            # TODO: Add to carrier inventory instead of player inventory
+            inventory.append(self.owner)
+            objects.remove(self.owner)
+
+            message(carrier.name + ' picked up a ' + self.owner.name + '!', libtcod.green)
+    
+    def use(self):
+        # If we have a 'use' function, call it.
+        if self.use_function is None:
+            message('The ', self.owner.name + ' cannot be used.  Sorey bud.')
+        else:
+            if self.use_function(self.carrier) != 'cancelled':
+                # If not cancelled, destroy the item after use
+                inventory.remove(self.owner)
 
 def player_death(player):
     #the game ended!
@@ -217,12 +275,24 @@ def monster_death(monster):
     # We're on the floor now
     send_to_back(monster)
 
+# Common item uses:
+def cast_heal(target, amount=10):
+    # Heal the player
+    if target.fighter and target.fighter.hp < target.fighter.max_hp:
+        if target == player: message('You are healed!', libtcod.light_violet)
+        else: message('The ' + target.name + ' is healed.', libtcod.light_violet)
+        target.fighter.heal(amount)
+    else:
+        print target.fighter
+        return 'cancelled'
+
 ################################################################################
 # Initialize actors and items
 ################################################################################
-player_fighter = Fighter(hp=30, defense=20, power=20, death_function=player_death)
+player_fighter = Fighter(hp=30, defense=8, power=10, death_function=player_death)
 player = Object(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, '@', 'Player', libtcod.white, blocks=True, fighter=player_fighter)
 objects = [player]
+inventory = []
 
 def send_to_back(object):
     #make this object be drawn first, so all others appear above it if they're in the same tile.
@@ -243,13 +313,17 @@ def player_move_or_attack(dx, dy):
     #try to find an attackable object there
     target = None
     for object in objects:
-        if object.fighter and object.x == x and object.y == y:
+        if object.x == x and object.y == y:
             target = object
             break
  
     #attack if target found, move otherwise
     if target is not None:
-        player.fighter. attack(target)
+        if object.fighter:
+            player.fighter.attack(target)
+        elif object.door:
+            target.open()
+            fov_recompute = True
 
     else:
         player.move(dx, dy)
@@ -261,11 +335,12 @@ def player_move_or_attack(dx, dy):
 MAP_WIDTH = 500
 MAP_HEIGHT = 500
 
-ROOM_MAX_SIZE = 10
-ROOM_MIN_SIZE = 6
-MAX_ROOMS = 100
+ROOM_MAX_SIZE = 20
+ROOM_MIN_SIZE = 10
+MAX_ROOMS = 450
 
 MAX_ROOM_MONSTERS = 3
+MAX_ROOM_ITEMS = 3
 
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
@@ -347,6 +422,24 @@ def place_objects(room):
                 blocks=True, fighter=monster_fighter, ai=monster_ai)
  
         objects.append(monster)
+
+    #choose random number of items
+    num_items = libtcod.random_get_int(0, 0, MAX_ROOM_ITEMS)
+ 
+    for i in range(num_items):
+        #choose random spot for this item
+        x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
+        y = libtcod.random_get_int(0, room.y1+1, room.y2-1)
+ 
+        #only place it if the tile is not blocked
+        if not is_blocked(x, y):
+            #create a healing potion
+            item_component = Item(use_function=cast_heal)
+            item = Object(x, y, '!', 'healing potion', libtcod.violet, 
+                blocks=False, item=item_component)
+ 
+            objects.append(item)
+            send_to_back(item)  #items appear below other objects
 
 def make_debug_map():
     global map
@@ -534,6 +627,9 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
         name + ': ' + str(value) + '/' + str(maximum))
 
+################################################################################
+# Game Messages
+################################################################################
 game_msgs = []
 
 def message(new_msg, color = libtcod.white):
@@ -547,6 +643,56 @@ def message(new_msg, color = libtcod.white):
  
         #add the new line as a tuple, with the text and the color
         game_msgs.append( (line, color) )
+
+################################################################################
+# Menus
+################################################################################
+def show_menu(header, options, width):
+    if len(options) > 26: raise ValueError('Menu cannot not have more than 26 items.')
+    
+    #calculate total height for the header (after auto-wrap) and one line per option
+    header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    height = len(options) + header_height
+
+    #create an off-screen console that represents the menu's window
+    window = libtcod.console_new(width, height)
+ 
+    #print the header, with auto-wrap
+    libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+
+    #print all the options
+    y = header_height
+    letter_index = ord('a')
+    for option_text in options:
+        text = '(' + chr(letter_index) + ') ' + option_text
+        libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+        y += 1
+        letter_index += 1
+    
+    #blit the contents of "window" to the root console
+    x = SCREEN_WIDTH/2 - width/2
+    y = SCREEN_HEIGHT/2 - height/2
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+
+    #present the root console to the player and wait for a key-press
+    libtcod.console_flush()
+    key = libtcod.console_wait_for_keypress(True)
+
+    index = key.c - ord('a')
+    if index >=0 and index < len(options): return index;
+    return None
+
+def show_inventory(header):
+    # Show the inventory if we have stuff to show
+    if len(inventory) == 0:
+        message('Your inventory is empty!')
+    else:
+        index = show_menu(header, [item.name for item in inventory], MENU_WIDTH)
+        
+        # If an item was chosen, return it.
+        if index is None: return None
+        else: return inventory[index].item
 
 ################################################################################
 # Field of View
