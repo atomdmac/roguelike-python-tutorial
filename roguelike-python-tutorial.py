@@ -835,7 +835,7 @@ panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 
 cam = Camera(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, MAP_WIDTH, MAP_HEIGHT)
 
-make_map()
+make_outdoor_map()
 #make_debug_map()
 make_fov_map()
 
