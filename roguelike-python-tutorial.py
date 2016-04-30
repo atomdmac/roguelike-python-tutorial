@@ -248,6 +248,17 @@ class Item:
                 # If not cancelled, destroy the item after use
                 inventory.remove(self.owner)
 
+class Door(Object):
+    def close(self):
+        self.char = '+'
+        self.blocks = False
+        fov_map[x][y].block_sight = False
+
+    def open(self):
+        self.char = '/'
+        self.blocks = False
+        fov_map[x][y].block_sight = False
+
 def player_death(player):
     #the game ended!
     global game_state
