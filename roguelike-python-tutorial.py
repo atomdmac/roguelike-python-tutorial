@@ -315,19 +315,20 @@ def player_move_or_attack(dx, dy):
     for object in objects:
         if object.x == x and object.y == y:
             target = object
-            break
- 
-    #attack if target found, move otherwise
-    if target is not None:
-        if object.fighter:
-            player.fighter.attack(target)
-        elif object.door:
-            target.open()
-            fov_recompute = True
 
-    else:
-        player.move(dx, dy)
-        fov_recompute = True
+            #attack if target found, move otherwise
+            if target is not None and target.blocks:
+                if object.fighter:
+                    player.fighter.attack(target)
+                    return
+
+                elif object.door:
+                    target.open()
+                    fov_recompute = True
+                    return
+                    
+    player.move(dx, dy)
+    fov_recompute = True
 
 ################################################################################
 # Map
