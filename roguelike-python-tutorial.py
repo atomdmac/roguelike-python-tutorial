@@ -529,6 +529,100 @@ def make_map():
             # room_no = Object(new_x, new_y, chr(65+num_rooms), libtcod.white)
             # objects.insert(0, room_no) #draw early, so monsters are drawn on top
 
+def create_building(room):
+    global map
+    walls = []
+    #go through the tiles in the rectangle and make them impassable
+    for x in range(room.x1, room.x2):
+        for y in range(room.y1, room.y2):
+            if x == room.x1 or y == room.y1 or x == room.x2-1 or y == room.y2-1:
+                map[x][y].blocked = True
+                map[x][y].block_sight = True
+
+                if (x == room.x1 and y == room.y1) or (x == room.x2-1 and y == room.y1) or (x == room.x2-1 and y == room.y2-1) or (x == room.x1 and room.y2-1):
+                    pass
+                else:
+                    walls.append((x, y))
+
+    # Make doors
+    num_doors = 2
+    doors = []
+    while len(doors) < num_doors:
+        selected = walls[libtcod.random_get_int(0, 0, len(walls)-1)]
+        if not selected in doors:
+            x, y = selected
+            map[x][y].block_sight = False
+            new_door = Object(x, y, '+', 'door', libtcod.dark_sepia, blocks=True)
+            objects.append(new_door)
+            doors.append(selected)
+
+    # Make windows
+    num_windows = 2
+    windows = []
+    while len(windows) < num_windows:
+        selected = walls[libtcod.random_get_int(0, 0, len(walls)-1)]
+        if not selected in doors and not selected in windows:
+            x, y = selected
+            map[x][y].block_sight = False
+            new_window = Object(x, y, '|', 'window', libtcod.light_blue, blocks=True)
+            objects.append(new_window)
+            windows.append(selected)
+
+def make_outdoor_map():
+    global map
+ 
+    # Fill map with "unblocked" tiles
+    map = [[ Tile(False)
+        for y in range(MAP_HEIGHT) ]
+            for x in range(MAP_WIDTH) ]
+
+    buildings = []
+    num_buildings = 0
+
+    for r in range(MAX_ROOMS):
+        #random width and height
+        w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+        h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+        #random position without going out of the boundaries of the map
+        x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
+        y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
+
+        #"Rect" class makes rectangles easier to work with
+        new_room = Rect(x, y, w, h)
+ 
+        #run through the other buildings and see if they intersect with this one
+        failed = False
+        for other_room in buildings:
+            if new_room.intersect(other_room):
+                failed = True
+                break
+
+        if not failed:
+            #this means there are no intersections, so this room is valid
+ 
+            #"paint" it to the map's tiles
+            create_building(new_room)
+ 
+            #center coordinates of new room, will be useful later
+            (new_x, new_y) = new_room.center()
+ 
+            if num_buildings == 0:
+                #this is the first room, where the player starts at
+                player.x = new_x
+                player.y = new_y
+
+            # Add some objects to the room
+            place_objects(new_room)
+ 
+            #finally, append the new room to the list
+            buildings.append(new_room)
+            num_buildings += 1
+
+            # optional: print "room number" to see how the map drawing worked
+            # we may have more than ten rooms, so print 'A' for the first room, 'B' for the next...
+            # room_no = Object(new_x, new_y, chr(65+num_rooms), libtcod.white)
+            # objects.insert(0, room_no) #draw early, so monsters are drawn on top
+
 def is_blocked(x, y):
     #first test the map tile
     if map[x][y].blocked:
