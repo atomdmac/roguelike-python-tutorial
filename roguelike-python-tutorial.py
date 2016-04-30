@@ -281,7 +281,7 @@ def monster_death(monster):
     monster.blocks = False
     monster.fighter = None
     monster.ai = None
-    monster.name = 'remains of ' + monster.name
+    monster.name = 'Remains of ' + monster.name
 
     # We're on the floor now
     send_to_back(monster)
