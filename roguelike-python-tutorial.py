@@ -81,6 +81,15 @@ def handle_keys():
             if item != None: 
                 item.use()
 
+        # Close door
+        elif key.c == ord('c'):
+            door_object = get_first_adjacent(player, 'door')
+            if door_object is not None:
+                door_object.door.close()
+                need_fov_refresh = True
+            else:
+                message('There isn\'t a door close enough to shut.')
+
         # Wait a turn
         elif key.c == ord('.'):
             pass
@@ -248,16 +257,22 @@ class Item:
                 # If not cancelled, destroy the item after use
                 inventory.remove(self.owner)
 
-class Door(Object):
+class Door:
     def close(self):
-        self.char = '+'
-        self.blocks = False
-        fov_map[x][y].block_sight = False
+        x = self.owner.x
+        y = self.owner.y
+        self.owner.char = '+'
+        self.owner.blocks = True
+        map[x][y].block_sight = True
+        libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
 
     def open(self):
-        self.char = '/'
-        self.blocks = False
-        fov_map[x][y].block_sight = False
+        x = self.owner.x
+        y = self.owner.y
+        self.owner.char = '/'
+        self.owner.blocks = False
+        map[x][y].block_sight = False
+        libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
 
 def player_death(player):
     #the game ended!
@@ -334,7 +349,7 @@ def player_move_or_attack(dx, dy):
                     return
 
                 elif object.door:
-                    target.open()
+                    target.door.open()
                     fov_recompute = True
                     return
                     
@@ -563,8 +578,11 @@ def create_building(room):
         selected = walls[libtcod.random_get_int(0, 0, len(walls)-1)]
         if not selected in doors:
             x, y = selected
-            map[x][y].block_sight = False
-            new_door = Object(x, y, '+', 'door', libtcod.dark_sepia, blocks=True)
+            map[x][y].block_sight = True
+            map[x][y].blocked = False
+            door_component = Door()
+            new_door = Object(x, y, '+', 'door', libtcod.dark_sepia, 
+                blocks=True, door=door_component)
             objects.append(new_door)
             doors.append(selected)
 
@@ -576,7 +594,8 @@ def create_building(room):
         if not selected in doors and not selected in windows:
             x, y = selected
             map[x][y].block_sight = False
-            new_window = Object(x, y, '|', 'window', libtcod.light_blue, blocks=True)
+            map[x][y].blocked = True
+            new_window = Object(x, y, '#', 'window', libtcod.light_blue, blocks=True)
             objects.append(new_window)
             windows.append(selected)
 
@@ -732,6 +751,35 @@ def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
     libtcod.console_set_default_foreground(panel, libtcod.white)
     libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER,
         name + ': ' + str(value) + '/' + str(maximum))
+
+def get_first_adjacent(target, component_name):
+    x = target.x
+    y = target.y
+
+    adjacent_tiles = [
+        # N
+        (x, y-1),
+        # NE
+        (x+1,y-1),
+        # E
+        (x+1,y),
+        # SE
+        (x+1,y+1),
+        # S
+        (x,y+1),
+        # SW
+        (x-1,y+1),
+        # W
+        (x-1,y),
+        # NW
+        (x-1,y-1)
+    ]
+    for tile in adjacent_tiles:
+        x, y = tile
+        for object in objects:
+            if object.x == x and object.y == y and hasattr(target, component_name):
+                return object
+    return None
 
 ################################################################################
 # Game Messages
