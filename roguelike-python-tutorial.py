@@ -90,6 +90,14 @@ def handle_keys():
             else:
                 message('There isn\'t a door close enough to shut.')
 
+        elif key.c == ord('s'):
+            smashable_object = get_first_adjacent(player, 'smashable')
+            if smashable_object is not None:
+                smashable_object.smashable.smash(player)
+                need_fov_refresh = True
+            else:
+                message('There isn\'t anything nearby to smash')
+
         # Wait a turn
         elif key.c == ord('.'):
             pass
@@ -119,7 +127,7 @@ class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
     def __init__(self, x, y, char, name, color, 
-        blocks=False, fighter=None, ai=None, item=None, door=None):
+        blocks=False, fighter=None, ai=None, item=None, door=None, smashable=None):
         self.x = x
         self.y = y
         self.char = char
@@ -142,6 +150,10 @@ class Object:
         self.door = door
         if self.door:  #let the Item component know who owns it
             self.door.owner = self
+
+        self.smashable = smashable
+        if self.smashable:  #let the Item component know who owns it
+            self.smashable.owner = self
 
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
@@ -273,6 +285,19 @@ class Door:
         self.owner.blocks = False
         map[x][y].block_sight = False
         libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+
+class Smashable:
+    def smash(self, smasher=None):
+        x = self.owner.x
+        y = self.owner.y
+        self.owner.char = '"'
+        self.owner.blocks = False
+        map[x][y].block_sight = False
+        libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+        if smasher is not None:
+            message(smasher.name + ' smashes the ' + self.owner.name + '.')
+        else:
+            message(self.owner.name + ' is smashed.')
 
 def player_death(player):
     #the game ended!
@@ -594,8 +619,9 @@ def create_building(room):
         if not selected in doors and not selected in windows:
             x, y = selected
             map[x][y].block_sight = False
-            map[x][y].blocked = True
-            new_window = Object(x, y, '#', 'window', libtcod.light_blue, blocks=True)
+            map[x][y].blocked = False
+            new_window = Object(x, y, '#', 'window', libtcod.light_blue, 
+                blocks=True, smashable=Smashable())
             objects.append(new_window)
             windows.append(selected)
 
@@ -777,7 +803,7 @@ def get_first_adjacent(target, component_name):
     for tile in adjacent_tiles:
         x, y = tile
         for object in objects:
-            if object.x == x and object.y == y and hasattr(target, component_name):
+            if object.x == x and object.y == y and hasattr(target, component_name) and getattr(object, component_name) != None:
                 return object
     return None
 
