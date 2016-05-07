@@ -23,13 +23,13 @@ TILE_TYPE = {
     },
     'GRASS_2': {
         'char': '',
-        'foreground_color': libtcod.Color(0, 230, 0),
-        'background_color': libtcod.Color(0, 230, 0)
+        'foreground_color': libtcod.Color(0, 210, 0),
+        'background_color': libtcod.Color(0, 210, 0)
     },
     'GRASS_3': {
         'char': '',
-        'foreground_color': libtcod.Color(0, 200, 0),
-        'background_color': libtcod.Color(0, 200, 0)
+        'foreground_color': libtcod.Color(0, 190, 0),
+        'background_color': libtcod.Color(0, 190, 0)
     },
     'FLOOR_WOOD': {
         'char': '_',
@@ -431,6 +431,9 @@ MAX_ROOMS = 450
 MAX_ROOM_MONSTERS = 3
 MAX_ROOM_ITEMS = 3
 
+# Noise for generating terrain
+height_map = libtcod.noise_new(2)
+
 color_dark_wall = libtcod.Color(0, 0, 100)
 color_light_wall = libtcod.Color(130, 110, 50)
 color_dark_ground = libtcod.Color(50, 50, 150)
@@ -675,9 +678,19 @@ def make_outdoor_map():
     global map
  
     # Fill map with "unblocked" tiles
-    map = [[ Tile(False, data=random.choice((TILE_TYPE['GRASS_1'], TILE_TYPE['GRASS_2'], TILE_TYPE['GRASS_3'])))
+    data = libtcod.noise_get(height_map, [10, 10])
+    map = [[ Tile(False, data=TILE_TYPE['GRASS_3'])
         for y in range(MAP_HEIGHT) ]
             for x in range(MAP_WIDTH) ]
+
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            data = libtcod.noise_get(height_map, [x*0.1, y*0.1], libtcod.NOISE_PERLIN)
+            # print data
+            if data > 0.2:  data = TILE_TYPE['GRASS_1']
+            elif data < -0.2: data = TILE_TYPE['GRASS_3']
+            else: data = TILE_TYPE['GRASS_2']
+            map[y][x].data = data
 
     buildings = []
     num_buildings = 0
@@ -945,7 +958,7 @@ def make_fov_map():
 ################################################################################
 # Initialization
 ################################################################################
-font = 'arial10x10.png'
+font = 'arial20x20.png'
 libtcod.console_set_custom_font (font, libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
 libtcod.sys_set_fps(LIMIT_FPS)
@@ -965,7 +978,7 @@ make_outdoor_map()
 make_fov_map()
 
 #a warm welcoming message!
-message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
+message('Welcome to the end of the world...', libtcod.red)
 
 ################################################################################
 # Event Loop
