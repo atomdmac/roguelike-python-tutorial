@@ -1,5 +1,6 @@
 import math
 import textwrap
+import random
 import libtcodpy as libtcod;
 
 SCREEN_WIDTH = 80;
@@ -8,6 +9,39 @@ VIEWPORT_WIDTH = 80
 VIEWPORT_HEIGHT = 35
 MENU_WIDTH = SCREEN_WIDTH - (SCREEN_WIDTH / 4)
 LIMIT_FPS = 20
+
+color_dark_wall = libtcod.Color(0, 0, 100)
+color_light_wall = libtcod.Color(130, 110, 50)
+color_dark_ground = libtcod.Color(50, 50, 150)
+color_light_ground = libtcod.Color(200, 180, 50)
+
+TILE_TYPE = {
+    'GRASS_1': {
+        'char': '',
+        'foreground_color': libtcod.Color(0, 255, 0),
+        'background_color': libtcod.Color(0, 255, 0)
+    },
+    'GRASS_2': {
+        'char': '',
+        'foreground_color': libtcod.Color(0, 230, 0),
+        'background_color': libtcod.Color(0, 230, 0)
+    },
+    'GRASS_3': {
+        'char': '',
+        'foreground_color': libtcod.Color(0, 200, 0),
+        'background_color': libtcod.Color(0, 200, 0)
+    },
+    'FLOOR_WOOD': {
+        'char': '_',
+        'foreground_color': libtcod.Color(50, 20, 20),
+        'background_color': libtcod.Color(100, 50, 70)
+    },
+    'WALL_STONE': {
+        'char': '',
+        'foreground_color': libtcod.Color(230, 230, 230),
+        'background_color': libtcod.Color(230, 230, 230)
+    }
+}
 
 #sizes and coordinates relevant for the GUI
 BAR_WIDTH = 20
@@ -165,7 +199,7 @@ class Object:
         #convert to integer so the movement is restricted to the map grid
         dx = int(round(dx / distance))
         dy = int(round(dy / distance))
-        self.move(dx, dy)
+        moved = self.move(dx, dy)
 
     def distance_to(self, other):
         #return the distance to another object
@@ -178,6 +212,9 @@ class Object:
             #move by the given amount
             self.x += dx
             self.y += dy
+            return True
+        else:
+            return False
  
     def draw(self):
         # Don't draw if outside of the player's field-of-view
@@ -401,8 +438,10 @@ color_light_ground = libtcod.Color(200, 180, 50)
 
 class Tile:
     #a tile of the map and its properties
-    def __init__(self, blocked, block_sight = None):
+    def __init__(self, blocked, data, block_sight = None, tile_type=None):
         self.blocked = blocked
+        self.tile_type = tile_type
+        self.data = data
  
         #by default, if a tile is blocked, it also blocks sight
         if block_sight is None: block_sight = blocked
@@ -587,9 +626,12 @@ def create_building(room):
     #go through the tiles in the rectangle and make them impassable
     for x in range(room.x1, room.x2):
         for y in range(room.y1, room.y2):
+            map[x][y].data = TILE_TYPE['FLOOR_WOOD']
+            
             if x == room.x1 or y == room.y1 or x == room.x2-1 or y == room.y2-1:
                 map[x][y].blocked = True
                 map[x][y].block_sight = True
+                map[x][y].data = TILE_TYPE['WALL_STONE']
 
                 if (x == room.x1 and y == room.y1) or (x == room.x2-1 and y == room.y1) or (x == room.x2-1 and y == room.y2-1) or (x == room.x1 and room.y2-1):
                     pass
@@ -605,6 +647,8 @@ def create_building(room):
             x, y = selected
             map[x][y].block_sight = True
             map[x][y].blocked = False
+            map[x][y].data = TILE_TYPE['FLOOR_WOOD']
+            
             door_component = Door()
             new_door = Object(x, y, '+', 'door', libtcod.dark_sepia, 
                 blocks=True, door=door_component)
@@ -620,6 +664,8 @@ def create_building(room):
             x, y = selected
             map[x][y].block_sight = False
             map[x][y].blocked = False
+            map[x][y].data = TILE_TYPE['FLOOR_WOOD']
+
             new_window = Object(x, y, '#', 'window', libtcod.light_blue, 
                 blocks=True, smashable=Smashable())
             objects.append(new_window)
@@ -629,7 +675,7 @@ def make_outdoor_map():
     global map
  
     # Fill map with "unblocked" tiles
-    map = [[ Tile(False)
+    map = [[ Tile(False, data=random.choice((TILE_TYPE['GRASS_1'], TILE_TYPE['GRASS_2'], TILE_TYPE['GRASS_3'])))
         for y in range(MAP_HEIGHT) ]
             for x in range(MAP_WIDTH) ]
 
@@ -713,25 +759,29 @@ def render_all():
 
                 visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
                 wall = map[map_x][map_y].block_sight
+
+                foreground_color = map[map_x][map_y].data['foreground_color']
+                background_color = map[map_x][map_y].data['background_color']
+                tile_char = map[map_x][map_y].data['char']
                 
                 if not visible:
                     #if it's not visible right now, the player can only see it if it's explored
                     if map[map_x][map_y].explored:
-                        if wall:
-                            libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET)
-                        else:
-                            libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET)
+                        foreground_color = libtcod.color_lerp(foreground_color, libtcod.black, 0.5)
+                        background_color = libtcod.color_lerp(background_color, libtcod.black, 0.5)
                     else:
-                        libtcod.console_set_char_background(con, x, y, libtcod.black, libtcod.BKGND_SET)
+                        foreground_color = libtcod.black;
+                        background_color = libtcod.black;
 
                 else:
                     #it's visible
-                    if wall:
-                        libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
-                    else:
-                        libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
+
                     #since it's visible, explore it
                     map[map_x][map_y].explored = True
+
+                if len(tile_char) > 0: libtcod.console_put_char(con, x, y, tile_char)
+                libtcod.console_set_char_foreground(con, x, y, foreground_color )
+                libtcod.console_set_char_background(con, x, y, background_color )
  
     #draw all objects in the list
     for object in objects:
