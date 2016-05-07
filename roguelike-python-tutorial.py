@@ -929,7 +929,7 @@ def show_inventory(header):
 ################################################################################
 FOV_ALGO = 0  #default FOV algorithm
 FOV_LIGHT_WALLS = True
-TORCH_RADIUS = 10
+TORCH_RADIUS = 30
 
 # Do we need to refresh FOV this turn?
 need_fov_refresh = True
