@@ -197,9 +197,40 @@ class Object:
  
         #normalize it to length 1 (preserving direction), then round it and
         #convert to integer so the movement is restricted to the map grid
-        dx = int(round(dx / distance))
-        dy = int(round(dy / distance))
-        moved = self.move(dx, dy)
+        x = int(round(dx / distance))
+        y = int(round(dy / distance))
+        hasMoved = self.move(x, y)
+        
+        # If we couldn't move to our ideal spot, let's find the next best thing.
+        # Let's try moving horizontally first.
+        if not hasMoved and x:
+            x = -1 * x
+            y = 0
+            hasMoved = self.move(x, y)
+
+        # Failing that, let's try vertically.
+        if not hasMoved and y:
+            x = 0
+            y = -1 * y
+            hasMoved = self.move(x, y)
+
+        # What about diagonally?
+        if not hasMoved and not x:
+            x = 1
+            y = -1 * y
+            hasMoved = self.move(x, y)
+        if not hasMoved and not x:
+            x = -1
+            y = -1 * y
+            hasMoved = self.move(x, y)
+        if not hasMoved and not y:
+            x = -1 * x
+            y = 1
+            hasMoved = self.move(x, y)
+        if not hasMoved and not y:
+            x = -1 * x
+            y = -1
+            hasMoved = self.move(x, y)
 
     def distance_to(self, other):
         #return the distance to another object
