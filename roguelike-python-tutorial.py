@@ -168,6 +168,7 @@ class Object:
         self.name = name
         self.color = color
         self.blocks = blocks
+        self.path = None
 
         self.fighter = fighter
         if self.fighter:  #let the fighter component know who owns it
@@ -189,6 +190,25 @@ class Object:
         if self.smashable:  #let the Item component know who owns it
             self.smashable.owner = self
 
+    def get_passability(xFrom, yFrom, xTo, yTo, user_data):
+        return 1.0
+        #if map[xTo][yTo].blocked: return 1.0
+        #return 0.0
+
+    def set_path(self, target):
+        if self.path == None:
+            self.path = libtcod.path_new_using_function(MAP_WIDTH, MAP_HEIGHT, self.get_passability)
+
+        # Recalculate path
+        print 'From: ', self.x, self.y, ' To: ', target.x, target.y, ' Path: ', self.path
+        libtcod.path_compute(self.path, self.x, self.y, target.x, target.y)
+
+    def follow_path(self):
+        if self.path != None and not libtcod.path_is_empty(self.path):
+            x, y = libtcod.path_walk(self.path, True)
+            self.x = x
+            self.y = y
+
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
         dx = target_x - self.x
@@ -197,40 +217,12 @@ class Object:
  
         #normalize it to length 1 (preserving direction), then round it and
         #convert to integer so the movement is restricted to the map grid
-        x = int(round(dx / distance))
-        y = int(round(dy / distance))
-        hasMoved = self.move(x, y)
-        
-        # If we couldn't move to our ideal spot, let's find the next best thing.
-        # Let's try moving horizontally first.
-        if not hasMoved and x:
-            x = -1 * x
-            y = 0
-            hasMoved = self.move(x, y)
+        slope_x = dx / distance
+        slope_y = dy / distance
 
-        # Failing that, let's try vertically.
-        if not hasMoved and y:
-            x = 0
-            y = -1 * y
-            hasMoved = self.move(x, y)
-
-        # What about diagonally?
-        if not hasMoved and not x:
-            x = 1
-            y = -1 * y
-            hasMoved = self.move(x, y)
-        if not hasMoved and not x:
-            x = -1
-            y = -1 * y
-            hasMoved = self.move(x, y)
-        if not hasMoved and not y:
-            x = -1 * x
-            y = 1
-            hasMoved = self.move(x, y)
-        if not hasMoved and not y:
-            x = -1 * x
-            y = -1
-            hasMoved = self.move(x, y)
+        dx = int(round(slope_x))
+        dy = int(round(slope_y))
+        hasMoved = self.move(dx, dy)
 
     def distance_to(self, other):
         #return the distance to another object
@@ -302,11 +294,14 @@ class BasicMonster:
  
             #move towards player if far away
             if monster.distance_to(player) >= 2:
-                monster.move_towards(player.x, player.y)
- 
+                # monster.move_towards(player.x, player.y)
+                monster.set_path(player)
+
             #close enough, attack! (if the player is still alive.)
             elif player.fighter.hp > 0:
                 monster.fighter.attack(player)
+        else:
+            monster.follow_path()
 
 class Item:
     def __init__(self, use_function=None, carrier=None):
@@ -452,14 +447,14 @@ def player_move_or_attack(dx, dy):
 ################################################################################
 # Map
 ################################################################################
-MAP_WIDTH = 500
-MAP_HEIGHT = 500
+MAP_WIDTH = 100
+MAP_HEIGHT = 100
 
 ROOM_MAX_SIZE = 20
 ROOM_MIN_SIZE = 10
-MAX_ROOMS = 450
+MAX_ROOMS = 10
 
-MAX_ROOM_MONSTERS = 3
+MAX_ROOM_MONSTERS = 5
 MAX_ROOM_ITEMS = 3
 
 # Noise for generating terrain
@@ -973,7 +968,7 @@ def show_inventory(header):
 ################################################################################
 FOV_ALGO = 0  #default FOV algorithm
 FOV_LIGHT_WALLS = True
-TORCH_RADIUS = 30
+TORCH_RADIUS = 10
 
 # Do we need to refresh FOV this turn?
 need_fov_refresh = True
