@@ -190,24 +190,23 @@ class Object:
         if self.smashable:  #let the Item component know who owns it
             self.smashable.owner = self
 
-    def get_passability(xFrom, yFrom, xTo, yTo, user_data):
+    def get_passability(self, xFrom, yFrom, xTo, yTo, user_data):
+        if map[xTo][yTo].blocked: 
+            return 0.0
         return 1.0
-        #if map[xTo][yTo].blocked: return 1.0
-        #return 0.0
 
     def set_path(self, target):
         if self.path == None:
             self.path = libtcod.path_new_using_function(MAP_WIDTH, MAP_HEIGHT, self.get_passability)
 
         # Recalculate path
-        print 'From: ', self.x, self.y, ' To: ', target.x, target.y, ' Path: ', self.path
         libtcod.path_compute(self.path, self.x, self.y, target.x, target.y)
 
     def follow_path(self):
         if self.path != None and not libtcod.path_is_empty(self.path):
-            x, y = libtcod.path_walk(self.path, True)
-            self.x = x
-            self.y = y
+            x, y = libtcod.path_get(self.path, 0)
+            if self.move_to(x, y):
+                libtcod.path_walk(self.path, True)
 
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
@@ -235,6 +234,14 @@ class Object:
             #move by the given amount
             self.x += dx
             self.y += dy
+            return True
+        else:
+            return False
+
+    def move_to(self, x, y):
+        if not is_blocked(x, y):
+            self.x = x
+            self.y = y
             return True
         else:
             return False
@@ -296,6 +303,7 @@ class BasicMonster:
             if monster.distance_to(player) >= 2:
                 # monster.move_towards(player.x, player.y)
                 monster.set_path(player)
+                monster.follow_path()
 
             #close enough, attack! (if the player is still alive.)
             elif player.fighter.hp > 0:
