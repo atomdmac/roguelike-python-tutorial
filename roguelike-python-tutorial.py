@@ -195,18 +195,21 @@ class Object:
             return 0.0
         return 1.0
 
-    def set_path(self, target):
+    def set_path(self, target_x, target_y):
         if self.path == None:
             self.path = libtcod.path_new_using_function(MAP_WIDTH, MAP_HEIGHT, self.get_passability)
 
         # Recalculate path
-        libtcod.path_compute(self.path, self.x, self.y, target.x, target.y)
+        libtcod.path_compute(self.path, self.x, self.y, target_x, target_y)
 
+        # Return True if path can be followed, False if not.
     def follow_path(self):
         if self.path != None and not libtcod.path_is_empty(self.path):
             x, y = libtcod.path_get(self.path, 0)
             if self.move_to(x, y):
                 libtcod.path_walk(self.path, True)
+                return True
+        return False
 
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
@@ -302,14 +305,22 @@ class BasicMonster:
             #move towards player if far away
             if monster.distance_to(player) >= 2:
                 # monster.move_towards(player.x, player.y)
-                monster.set_path(player)
+                monster.set_path(player.x, player.y)
                 monster.follow_path()
 
             #close enough, attack! (if the player is still alive.)
             elif player.fighter.hp > 0:
                 monster.fighter.attack(player)
+        elif monster.follow_path():
+            pass
         else:
-            monster.follow_path()
+            self.wander()
+
+    def wander(self):
+        if not self.owner.follow_path():
+            target_x = libtcod.random_get_int(0, 1, MAP_WIDTH-1)
+            target_y = libtcod.random_get_int(0, 1, MAP_HEIGHT-1)
+            self.owner.set_path(target_x, target_y)
 
 class Item:
     def __init__(self, use_function=None, carrier=None):
