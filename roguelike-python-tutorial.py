@@ -40,6 +40,36 @@ TILE_TYPE = {
         'char': '',
         'foreground_color': libtcod.Color(230, 230, 230),
         'background_color': libtcod.Color(230, 230, 230)
+    },
+    'WALL_SINGLE_HLINE': {
+        'char': 196,
+        'foreground_color': libtcod.Color(255, 255, 255),
+        'background_color': libtcod.Color(120, 120, 120)
+    },
+    'WALL_SINGLE_VLINE': {
+        'char': 179,
+        'foreground_color': libtcod.Color(230, 230, 230),
+        'background_color': libtcod.Color(120, 120, 120)
+    },
+    'WALL_SINGLE_NE': {
+        'char': 191,
+        'foreground_color': libtcod.Color(230, 230, 230),
+        'background_color': libtcod.Color(120, 120, 120)
+    },
+    'WALL_SINGLE_NW': {
+        'char': 218,
+        'foreground_color': libtcod.Color(230, 230, 230),
+        'background_color': libtcod.Color(120, 120, 120)
+    },
+    'WALL_SINGLE_SE': {
+        'char': 217,
+        'foreground_color': libtcod.Color(230, 230, 230),
+        'background_color': libtcod.Color(120, 120, 120)
+    },
+    'WALL_SINGLE_SW': {
+        'char': 192,
+        'foreground_color': libtcod.Color(230, 230, 230),
+        'background_color': libtcod.Color(120, 120, 120)
     }
 }
 
@@ -196,6 +226,9 @@ class Object:
         return 1.0
 
     def set_path(self, target_x, target_y):
+        def make_map(width, height):
+            path_map = libtcod.map_new(width, height)
+
         if self.path == None:
             self.path = libtcod.path_new_using_function(MAP_WIDTH, MAP_HEIGHT, self.get_passability)
 
@@ -679,11 +712,26 @@ def create_building(room):
             if x == room.x1 or y == room.y1 or x == room.x2-1 or y == room.y2-1:
                 map[x][y].blocked = True
                 map[x][y].block_sight = True
-                map[x][y].data = TILE_TYPE['WALL_STONE']
+                map[x][y].data = TILE_TYPE['WALL_SINGLE_HLINE']
 
-                if (x == room.x1 and y == room.y1) or (x == room.x2-1 and y == room.y1) or (x == room.x2-1 and y == room.y2-1) or (x == room.x1 and room.y2-1):
-                    pass
-                else:
+                if  x == room.x1 and y == room.y1:
+                    map[x][y].data = TILE_TYPE['WALL_SINGLE_NW']
+
+                elif x == room.x2-1 and y == room.y1:
+                    map[x][y].data = TILE_TYPE['WALL_SINGLE_NE']
+
+                elif x == room.x2-1 and y == room.y2-1:
+                    map[x][y].data = TILE_TYPE['WALL_SINGLE_SE']
+
+                elif x == room.x1 and y == room.y2-1:
+                    map[x][y].data = TILE_TYPE['WALL_SINGLE_SW']
+
+                elif x == room.x1 or x == room.x2-1:
+                    map[x][y].data = TILE_TYPE['WALL_SINGLE_VLINE']
+                    walls.append((x, y))
+
+                elif y == room.y1 or y == room.y2-1:
+                    map[x][y].data = TILE_TYPE['WALL_SINGLE_HLINE']
                     walls.append((x, y))
 
     # Make doors
@@ -832,14 +880,26 @@ def render_all():
                         background_color = libtcod.black;
 
                 else:
-                    #it's visible
 
                     #since it's visible, explore it
                     map[map_x][map_y].explored = True
 
-                if len(tile_char) > 0: libtcod.console_put_char(con, x, y, tile_char)
-                libtcod.console_set_char_foreground(con, x, y, foreground_color )
+                # Set charcter/graphic for this tile
+                # ...by ASCII code
+                if type(tile_char) == int:
+                    libtcod.console_set_char(con, x, y, tile_char)
+
+                # ...by character string
+                elif tile_char is str and not len(tile_char) > 0:
+                    libtcod.console_put_char(con, x, y, tile_char)
+
+                # ...no character given
+                else:
+                    libtcod.console_put_char(con, x, y, ' ')
+
                 libtcod.console_set_char_background(con, x, y, background_color )
+                libtcod.console_set_char_foreground(con, x, y, foreground_color )
+
  
     #draw all objects in the list
     for object in objects:
